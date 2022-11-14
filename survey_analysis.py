@@ -14,6 +14,64 @@ sns.set(context='talk', style='white')
 import warnings
 warnings.filterwarnings('ignore')
 
+
+def survey_monkey_data_long(df: pd.DataFrame, id_col: str = 'Unnamed: 0'):
+    """Uses pd.DataFrame of SurveyMonkey data and transforms it into long-format.
+
+    Args:
+        df (pd.DataFrame): Raw SurveyMonkey data.
+        id_col (str): Column that has the participant Id / number, in case its renamed.
+    Returns:
+        pd.DataFrame: SurveyMonkey data in long format.
+    """
+    survey_clean = df.copy()
+
+    # Useful columns as ID:
+    ID_cols = [id_col,
+               'Are you a member of OHBM?',
+               'What geographic region are you currently located in?',
+               'What is your current career status?']
+
+    # Define questions with multiple answer options
+    multi_Q1 = ('Which of the following platforms do you use to access OHBM content? '
+                + 'When applicable, a direct link to the platform is provided next to each option. '
+                + 'Please check all options that apply.')
+
+    multi_Q2 = ('Do you currently follow any of the following OHBM Special Interest Groups '
+                + '(SIG) platforms? When applicable, a direct link to the platform is provided '
+                + 'next to each option. Please check all options that apply.')
+
+    multi_Q3 = 'How important is each of these types of content to you?'
+
+    # Add questions to list and define the range of "Unnamed: XX" answer options.
+    multi_Qs = [multi_Q1, multi_Q2, multi_Q3]
+    unnamed_range = [(13, 21), (41, 47), (49, 55)]
+
+    orig_name = []
+    new_name = []
+
+    for q, ur in zip(multi_Qs, unnamed_range):
+        unnamed = [q] + [f'Unnamed: {i}' for i in range(ur[0], ur[1] + 1)]
+        renamed = [q + '@@' + df.loc[0, un] for un in unnamed] # Use @@ as separator
+        orig_name.extend(unnamed)
+        new_name.extend(renamed)
+
+    # Rename "Unnamed: XX" Columns to have the name of the Question.
+    rename_dict = {i : j for i, j in zip(orig_name, new_name)}
+    survey_clean.rename(columns=rename_dict, inplace=True)
+    # Drop response description (stored in first row)
+    survey_clean.drop(0, inplace=True)
+
+    # Bring into long format:
+    survey_long = survey_clean.melt(id_vars=ID_cols, var_name='questions',
+                                    value_name='response')
+    survey_long.sort_values(id_col, inplace=True)
+
+    survey_long['questions'] = survey_long['questions'].str.split('@@').str[0]
+
+    return survey_long
+
+
 # Load in the data. This spreadsheet is (almost) direct from SurveyMonkey,
 # though IP addresses, access dates, and free-text responses were scrubbed
 # to anonymize respondents.
