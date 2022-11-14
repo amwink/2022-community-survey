@@ -72,6 +72,46 @@ def survey_monkey_data_long(df: pd.DataFrame, id_col: str = 'Unnamed: 0'):
     return survey_long
 
 
+def survey_data_wide(df_long: pd.DataFrame, id_col: str = 'Unnamed: 0'):
+    """Moves survey data from long format back to wide format. Summarizes multi
+    answer questions into lists.
+
+    Args:
+        df_long (pd.DataFrame): SurveyMonkey data in long format.
+        id_col (str): Column that has the participant Id / number, in case its renamed.
+
+    Returns:
+        pd.DataFrame: SurveyMonkey data in wide format.
+    """
+
+    ID_cols = [id_col,
+               'Are you a member of OHBM?',
+               'What geographic region are you currently located in?',
+               'What is your current career status?']
+
+    survey_wide = df_long.copy()
+    survey_wide[id_col] = survey_wide[id_col].astype("string")
+    # Drop nan responses
+    survey_wide.dropna(inplace=True, subset=['response'])
+    # Summarize answers to questions in list
+    survey_wide = survey_wide.groupby(ID_cols + ['questions']).agg({'response': lambda x: list(x)}).reset_index()
+    # Move ID cols into a single column - to avoid duplicates for pivoting
+    survey_wide['new_index'] = survey_wide[ID_cols].apply(lambda row: '@@'.join(row.values.astype(str)), axis=1)
+    survey_wide.drop(columns=ID_cols, inplace=True)
+    # Pivot
+    survey_wide = survey_wide.pivot('new_index', columns=['questions'], values='response').reset_index()
+    # Move temporary index back into columns
+    for n, id in enumerate(ID_cols):
+        survey_wide[id] = survey_wide['new_index'].str.split('@@').str[n]
+
+    survey_wide[id_col] = survey_wide[id_col].astype("int")
+
+    survey_wide.drop(columns='new_index', inplace=True)
+    survey_wide.sort_values(id_col, inplace=True)
+
+    return survey_wide
+
+
 # Load in the data. This spreadsheet is (almost) direct from SurveyMonkey,
 # though IP addresses, access dates, and free-text responses were scrubbed
 # to anonymize respondents.
